@@ -5,9 +5,11 @@ export async function GET(request) {
   const q = searchParams.get("q") || "";
   const category = searchParams.get("category") || "All";
   const cursor = searchParams.get("cursor") || undefined;
+  const sort = searchParams.get("sort") || "1"; // default: most favorited
+  const limit = parseInt(searchParams.get("limit") || "30", 10);
 
   try {
-    const result = await searchCatalog({ q, category, cursor });
+    const result = await searchCatalog({ q, category, cursor, sort, limit });
 
     return Response.json(result, {
       headers: {

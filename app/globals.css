@@ -60,3 +60,15 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
+@keyframes floatGentle {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(3deg); }
+}
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(-2deg); }
+}
+@keyframes expandLine {
+  from { width: 0; }
+  to { width: 48px; }
+}

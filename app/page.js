@@ -1,5 +1,5 @@
-import OutfitBuilder from "@/components/OutfitBuilder";
+import LandingPage from "@/components/LandingPage";
 
 export default function Home() {
-  return <OutfitBuilder />;
+  return <LandingPage />;
 }

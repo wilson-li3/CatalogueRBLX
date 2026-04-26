@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { styles } from "@/lib/styles";
 import { useCatalogSearch } from "@/hooks/useCatalogSearch";
 import { useOutfit } from "@/hooks/useOutfit";
@@ -15,8 +16,17 @@ import ShareModal from "./ShareModal";
 import Toast from "./Toast";
 
 export default function OutfitBuilder() {
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
+
+  // Read initial query/category from URL params (from landing page links)
+  useEffect(() => {
+    const q = searchParams.get("q");
+    const cat = searchParams.get("category");
+    if (q) setQuery(q);
+    if (cat) setActiveCategory(cat);
+  }, [searchParams]);
   const [showShare, setShowShare] = useState(false);
 
   const { toast, showToast } = useToast();
