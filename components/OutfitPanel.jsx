@@ -24,13 +24,13 @@ export default function OutfitPanel({ outfit, onRemove, onClear, onShare }) {
       <div style={styles.totalRow}>
         <span style={styles.totalLabel}>Total Cost</span>
         <span style={styles.totalValue}>
-          <span style={styles.robuxIconLg}>R$</span> {totalPrice.toLocaleString()}
+          <span style={styles.robuxIconLg}>R$ </span>{totalPrice.toLocaleString()}
         </span>
       </div>
 
       <div style={styles.outfitActions}>
         <button style={styles.shareBtn} onClick={onShare} disabled={outfit.length === 0}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ marginRight: 6 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ marginRight: 8 }}>
             <circle cx="18" cy="5" r="3" />
             <circle cx="6" cy="12" r="3" />
             <circle cx="18" cy="19" r="3" />
@@ -40,7 +40,7 @@ export default function OutfitPanel({ outfit, onRemove, onClear, onShare }) {
           Share Outfit
         </button>
         <button style={styles.clearBtn} onClick={onClear} disabled={outfit.length === 0}>
-          Clear All
+          Clear
         </button>
       </div>
     </div>

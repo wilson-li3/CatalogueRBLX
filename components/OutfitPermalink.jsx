@@ -14,14 +14,23 @@ export default function OutfitPermalink({ outfit, slug }) {
     return (
       <div style={styles.root}>
         <div style={{ textAlign: "center", padding: "80px 24px" }}>
-          <h1 style={{ fontFamily: "'Space Mono', monospace", fontSize: 24, color: "var(--text)", marginBottom: 12 }}>
+          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, color: "var(--text)", marginBottom: 12 }}>
             Outfit Not Found
           </h1>
-          <p style={{ color: "var(--text-muted)", marginBottom: 24 }}>
+          <p style={{ color: "var(--text-muted)", marginBottom: 28, fontSize: 14 }}>
             This outfit doesn&apos;t exist or has been removed.
           </p>
-          <Link href="/" style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>
-            ← Build your own outfit
+          <Link href="/" style={{
+            color: "#f5efe7",
+            background: "var(--accent)",
+            padding: "12px 28px",
+            borderRadius: 24,
+            fontWeight: 600,
+            fontSize: 13,
+            textDecoration: "none",
+            letterSpacing: "0.03em",
+          }}>
+            Build your own outfit
           </Link>
         </div>
       </div>
@@ -44,44 +53,38 @@ export default function OutfitPermalink({ outfit, slug }) {
 
   return (
     <div style={styles.root}>
-      {/* Header */}
       <header style={styles.header}>
         <div style={styles.logoRow}>
-          <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={styles.logoIcon}>&#9670;</span>
-            <span style={styles.logoText}>DRIP CHECK</span>
+          <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={styles.logoIcon} />
+            <span style={styles.logoText}>drip check</span>
           </Link>
           <span style={styles.tagline}>Shared Outfit</span>
         </div>
       </header>
 
-      <div style={{
-        maxWidth: 600,
-        margin: "0 auto",
-        padding: "32px 24px",
-      }}>
-        {/* Outfit Items */}
-        <h2 style={{
-          fontFamily: "'Space Mono', monospace",
-          fontSize: 20,
-          fontWeight: 700,
-          marginBottom: 20,
-          color: "var(--text)",
-        }}>
-          Outfit ({outfit.items.length} items)
-        </h2>
+      <div style={{ maxWidth: 620, margin: "0 auto", padding: "36px 24px" }}>
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--text-light)", marginBottom: 8 }}>
+            Curated
+          </p>
+          <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 700, color: "var(--text)" }}>
+            Shared Outfit
+          </h2>
+          <div style={{ width: 40, height: 2, background: "var(--blush)", marginTop: 12, borderRadius: 1, opacity: 0.5 }} />
+        </div>
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(145px, 1fr))",
           gap: 12,
-          marginBottom: 24,
+          marginBottom: 28,
         }}>
           {outfit.items.map((item) => (
             <div key={item.id} style={{
               background: "var(--surface)",
               border: "1px solid var(--border)",
-              borderRadius: 12,
+              borderRadius: 20,
               overflow: "hidden",
             }}>
               <div style={{
@@ -95,15 +98,14 @@ export default function OutfitPermalink({ outfit, slug }) {
                 {item.thumbnail ? (
                   <img src={item.thumbnail} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : (
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" opacity="0.4">
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                  </svg>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--blush)", opacity: 0.15 }} />
                 )}
               </div>
-              <div style={{ padding: "8px 10px" }}>
+              <div style={{ padding: "10px 12px" }}>
+                <div style={styles.itemType}>{item.type}</div>
                 <div style={styles.itemName}>{item.name}</div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={styles.itemType}>{item.type}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-light)" }}>by {item.creatorName || "Creator"}</span>
                   <span style={styles.itemPrice}>
                     <span style={styles.robuxIcon}>R$</span> {item.price.toLocaleString()}
                   </span>
@@ -113,43 +115,44 @@ export default function OutfitPermalink({ outfit, slug }) {
           ))}
         </div>
 
-        {/* Empty slots */}
         {SLOT_TYPES.filter((t) => !outfit.items.some((i) => i.type === t)).length > 0 && (
-          <p style={{ color: "var(--text-muted)", fontSize: 12, marginBottom: 24 }}>
+          <p style={{ color: "var(--text-caption)", fontSize: 12, marginBottom: 24, fontWeight: 500 }}>
             Empty slots: {SLOT_TYPES.filter((t) => !outfit.items.some((i) => i.type === t)).join(", ")}
           </p>
         )}
 
-        {/* Total + Actions */}
-        <div style={{
-          ...styles.totalRow,
-          borderTop: "1px solid var(--border)",
-          paddingTop: 16,
-        }}>
+        <div style={styles.totalRow}>
           <span style={styles.totalLabel}>Total Cost</span>
           <span style={styles.totalValue}>
-            <span style={styles.robuxIconLg}>R$</span> {outfit.totalPrice.toLocaleString()}
+            <span style={styles.robuxIconLg}>R$ </span>{outfit.totalPrice.toLocaleString()}
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button
             onClick={handleVote}
             disabled={voting}
             style={{
-              ...styles.shareBtn,
-              background: voted ? "var(--accent)" : "var(--surface-2)",
-              color: voted ? "var(--bg)" : "var(--text)",
-              border: `1px solid ${voted ? "var(--accent)" : "var(--border)"}`,
-              flex: "none",
-              padding: "10px 20px",
+              padding: "12px 24px",
+              borderRadius: 24,
+              fontWeight: 700,
+              fontSize: 13,
+              fontFamily: "'Libre Franklin', sans-serif",
+              letterSpacing: "0.03em",
+              background: voted ? "var(--accent)" : "transparent",
+              color: voted ? "#f5efe7" : "var(--text-muted)",
+              borderWidth: 1.5,
+              borderStyle: "solid",
+              borderColor: voted ? "var(--accent)" : "rgba(180, 160, 140, 0.18)",
+              transition: "all 0.3s ease",
+              cursor: "pointer",
             }}
           >
-            {voted ? "★" : "☆"} {voteCount} {voteCount === 1 ? "vote" : "votes"}
+            {voted ? "\u2605" : "\u2606"} {voteCount} {voteCount === 1 ? "vote" : "votes"}
           </button>
 
           <Link href="/" style={{ textDecoration: "none", flex: 1 }}>
-            <button style={styles.shareBtn}>
+            <button style={{ ...styles.shareBtn, width: "100%" }}>
               Build Your Own
             </button>
           </Link>

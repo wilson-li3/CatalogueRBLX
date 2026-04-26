@@ -7,8 +7,8 @@ export default function Header() {
     <header style={styles.header}>
       <div style={styles.logoRow}>
         <div style={styles.logo}>
-          <span style={styles.logoIcon}>&#9670;</span>
-          <span style={styles.logoText}>DRIP CHECK</span>
+          <div style={styles.logoIcon} />
+          <span style={styles.logoText}>drip check</span>
         </div>
         <span style={styles.tagline}>Roblox Outfit Builder</span>
       </div>
