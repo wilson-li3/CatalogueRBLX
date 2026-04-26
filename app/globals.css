@@ -72,3 +72,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   from { width: 0; }
   to { width: 48px; }
 }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

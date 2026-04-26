@@ -66,6 +66,7 @@ export default function Header() {
           {[
             { label: "Home", href: "/" },
             { label: "Builder", href: "/builder" },
+            { label: "3D Try On", href: "/builder/tryon" },
             { label: "Trending", href: "/#trending" },
           ].map((item) => (
             <Link

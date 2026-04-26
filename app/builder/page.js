@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import OutfitBuilder from "@/components/OutfitBuilder";
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function BuilderPage() {
-  return <OutfitBuilder />;
+  return (
+    <Suspense>
+      <OutfitBuilder />
+    </Suspense>
+  );
 }
