@@ -14,7 +14,7 @@ function LoadingIndicator() {
   );
 }
 
-export default function AvatarViewer({ username }) {
+export default function AvatarViewer({ username, outfit = [], onRemoveItem }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -138,6 +138,98 @@ export default function AvatarViewer({ username }) {
         </Canvas>
       </Suspense>
 
+      {/* Outfit overlay — items being tried on */}
+      {outfit.length > 0 && (
+        <div style={{
+          position: "absolute", top: 16, left: 16, zIndex: 10,
+          maxWidth: 220, maxHeight: "calc(100% - 80px)",
+          display: "flex", flexDirection: "column", gap: 0,
+          background: "rgba(255, 255, 255, 0.85)",
+          backdropFilter: "blur(12px)",
+          borderRadius: 16,
+          border: "1px solid rgba(180, 160, 140, 0.2)",
+          boxShadow: "0 4px 24px rgba(74, 55, 40, 0.08)",
+          overflow: "hidden",
+        }}>
+          <div style={{
+            padding: "12px 14px 8px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: "0.15em",
+              textTransform: "uppercase", color: "var(--text-caption)",
+            }}>
+              Trying On ({outfit.length})
+            </span>
+            <span style={{
+              fontSize: 12, fontWeight: 700,
+              color: "var(--robux)",
+              fontFamily: "'Playfair Display', serif",
+            }}>
+              R$ {outfit.reduce((s, i) => s + i.price, 0).toLocaleString()}
+            </span>
+          </div>
+
+          <div style={{
+            padding: "4px 10px 12px",
+            overflowY: "auto",
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            {outfit.map((item, idx) => (
+              <div
+                key={item.id}
+                onClick={() => onRemoveItem && onRemoveItem(item.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "6px 8px",
+                  borderRadius: 10,
+                  background: "rgba(255, 255, 255, 0.6)",
+                  border: "1px solid rgba(180, 160, 140, 0.12)",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  animation: `outfitItemIn 0.3s cubic-bezier(0.23, 1, 0.32, 1) ${idx * 0.05}s both`,
+                }}
+              >
+                {item.thumbnail ? (
+                  <img
+                    src={item.thumbnail}
+                    alt={item.name}
+                    style={{
+                      width: 36, height: 36, borderRadius: 8,
+                      objectFit: "cover", flexShrink: 0,
+                      background: "var(--surface-2)",
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    background: "var(--cream-dark)", flexShrink: 0,
+                  }} />
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 600,
+                    color: "var(--text)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {item.name}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--text-caption)" }}>
+                    {item.type}
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: 10, color: "var(--text-caption)",
+                  flexShrink: 0, opacity: 0.5,
+                }}>
+                  {"\u2715"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Controls hint */}
       <div style={{
         position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
@@ -154,6 +246,23 @@ export default function AvatarViewer({ username }) {
         </svg>
         Drag to rotate · Scroll to zoom
       </div>
+
+      {/* Note about try-on limitation */}
+      {data && !loading && !error && outfit.length === 0 && (
+        <div style={{
+          position: "absolute", top: 16, left: 16, zIndex: 5,
+          padding: "10px 14px",
+          background: "rgba(255, 255, 255, 0.7)",
+          backdropFilter: "blur(8px)",
+          borderRadius: 12,
+          border: "1px solid rgba(180, 160, 140, 0.15)",
+          maxWidth: 200,
+        }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
+            Add items from the catalog to preview your outfit
+          </div>
+        </div>
+      )}
     </div>
   );
 }

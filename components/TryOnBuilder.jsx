@@ -60,7 +60,7 @@ export default function TryOnBuilder() {
       <div style={s.splitLayout}>
         {/* ===== Left: 3D Viewport ===== */}
         <div style={s.viewportPanel}>
-          <AvatarViewer username={username} />
+          <AvatarViewer username={username} outfit={outfit} onRemoveItem={removeFromOutfit} />
         </div>
 
         {/* ===== Right: Sidebar ===== */}
