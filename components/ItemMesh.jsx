@@ -41,6 +41,10 @@ const TYPE_TARGET_Y = {
   "Waist Accessory": -3,
 };
 
+// Avatar camera direction (constant across all avatars)
+const AVATAR_CAM_DIR = { x: -0.40558, z: -0.819152 };
+const AVATAR_YAW = Math.atan2(AVATAR_CAM_DIR.x, AVATAR_CAM_DIR.z);
+
 export function ItemMesh({ data, avatarAabb, itemType }) {
   const mtl = useLoader(MTLLoader, data.mtl);
   const obj = useLoader(
@@ -54,35 +58,45 @@ export function ItemMesh({ data, avatarAabb, itemType }) {
 
   const scale = 2;
 
+  // Compute yaw correction: align item's "front" to match the avatar's "front"
+  // Camera direction points FROM the model's front, so model front = -camDir in XZ
+  const camDir = data.camera?.direction;
+  let yawCorrection = 0;
+  if (camDir) {
+    const itemYaw = Math.atan2(camDir.x, camDir.z);
+    yawCorrection = AVATAR_YAW - itemYaw;
+  }
+
   // Item AABB center in its own coordinate space
   const cx = (data.aabb.min.x + data.aabb.max.x) / 2;
   const cy = (data.aabb.min.y + data.aabb.max.y) / 2;
   const cz = (data.aabb.min.z + data.aabb.max.z) / 2;
 
-  // With rotation=[0, PI, 0], a vertex (vx, vy, vz) renders at:
-  //   worldX = -vx*scale + posX
-  //   worldY =  vy*scale + posY
-  //   worldZ = -vz*scale + posZ
-  //
-  // To place item center at target (tx, ty, tz):
-  //   posX = tx + cx*scale
-  //   posY = ty - cy*scale
-  //   posZ = tz + cz*scale
+  // The total Y rotation = yawCorrection (align to avatar) + PI (face camera, same as avatar)
+  const totalYRot = yawCorrection + Math.PI;
+
+  // Rotate AABB center by the FULL rotation (must match what Three.js applies to the mesh)
+  const cosR = Math.cos(totalYRot);
+  const sinR = Math.sin(totalYRot);
+  const rcx = cx * cosR + cz * sinR;
+  const rcz = -cx * sinR + cz * cosR;
 
   const targetY = TYPE_TARGET_Y[itemType] ?? -0.5;
   const targetX = 0;    // avatar center X
   const targetZ = -4.6; // avatar center Z in world space
 
-  const posX = targetX + cx * scale;
+  // Three.js: worldPos = position + R(totalYRot) * (scale * vertex)
+  // To place AABB center at target: position = target - scale * R(totalYRot) * center
+  const posX = targetX - rcx * scale;
   const posY = targetY - cy * scale;
-  const posZ = targetZ + cz * scale;
+  const posZ = targetZ - rcz * scale;
 
   return (
     <primitive
       object={obj}
       scale={scale}
       position={[posX, posY, posZ]}
-      rotation={[0, Math.PI, 0]}
+      rotation={[0, totalYRot, 0]}
     />
   );
 }
