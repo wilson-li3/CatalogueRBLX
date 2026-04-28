@@ -28,8 +28,6 @@ const AvatarViewer = dynamic(() => import("@/components/AvatarViewer"), {
 
 export default function TryOnBuilder() {
   const searchParams = useSearchParams();
-  const [usernameInput, setUsernameInput] = useState("Roblox");
-  const [username, setUsername] = useState("Roblox");
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
 
@@ -44,13 +42,6 @@ export default function TryOnBuilder() {
     if (cat) setActiveCategory(cat);
   }, [searchParams]);
 
-  const handleLoadAvatar = (e) => {
-    e.preventDefault();
-    if (usernameInput.trim()) {
-      setUsername(usernameInput.trim());
-    }
-  };
-
   const totalPrice = outfit.reduce((sum, i) => sum + i.price, 0);
 
   return (
@@ -60,26 +51,11 @@ export default function TryOnBuilder() {
       <div style={s.splitLayout}>
         {/* ===== Left: 3D Viewport ===== */}
         <div style={s.viewportPanel}>
-          <AvatarViewer username={username} outfit={outfit} onRemoveItem={removeFromOutfit} />
+          <AvatarViewer outfit={outfit} onRemoveItem={removeFromOutfit} />
         </div>
 
         {/* ===== Right: Sidebar ===== */}
         <div style={s.sidebar}>
-          {/* Username Input */}
-          <div style={s.sidebarSection}>
-            <label style={s.sectionLabel}>Roblox Username</label>
-            <form onSubmit={handleLoadAvatar} style={{ display: "flex", gap: 8 }}>
-              <input
-                type="text"
-                value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value)}
-                placeholder="Enter username..."
-                style={s.usernameInput}
-              />
-              <button type="submit" style={s.loadBtn}>Load</button>
-            </form>
-          </div>
-
           {/* Search + Categories */}
           <div style={s.sidebarSection}>
             <SearchBar query={query} setQuery={setQuery} />
@@ -191,31 +167,6 @@ const s = {
     textTransform: "uppercase",
     color: "var(--text-caption)",
     marginBottom: 10,
-  },
-  usernameInput: {
-    flex: 1,
-    padding: "10px 14px",
-    background: "var(--surface-2)",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "var(--border)",
-    fontSize: 13,
-    color: "var(--text)",
-    fontFamily: "'Libre Franklin', sans-serif",
-    outline: "none",
-  },
-  loadBtn: {
-    padding: "10px 20px",
-    background: "var(--accent)",
-    color: "#f5efe7",
-    borderRadius: 12,
-    fontSize: 12,
-    fontWeight: 700,
-    letterSpacing: "0.04em",
-    fontFamily: "'Libre Franklin', sans-serif",
-    cursor: "pointer",
-    border: "none",
   },
   itemGrid: {
     display: "grid",

@@ -1,162 +1,84 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useCallback, useRef, Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, ContactShadows } from "@react-three/drei";
-import { Avatar } from "@/components/Avatar";
-import { ItemMesh } from "@/components/ItemMesh";
+import { Mannequin } from "@/components/Mannequin";
+import { AccessoryMesh } from "@/components/AccessoryMesh";
 
-function LoadingIndicator() {
-  return (
-    <mesh position={[0, 0, -5]}>
-      <boxGeometry args={[1, 1.5, 0.5]} />
-      <meshStandardMaterial color="#ddb892" opacity={0.3} transparent />
-    </mesh>
-  );
-}
-
-export default function AvatarViewer({ username, outfit = [], onRemoveItem }) {
-  const [avatarData, setAvatarData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Map of assetId -> { meshData, loading, error }
+export default function AvatarViewer({ outfit = [], onRemoveItem }) {
+  // Map of assetId -> { data, loading, error, itemType }
   const [equippedItems, setEquippedItems] = useState({});
-  // Cache mesh data so re-equipping doesn't refetch
   const meshCache = useRef({});
+  const prevOutfitRef = useRef([]);
 
-  // Load avatar
-  useEffect(() => {
-    if (!username) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    fetch(`/api/avatar?username=${encodeURIComponent(username)}`)
-      .then((res) => {
-        if (!res.ok) return res.json().then((d) => { throw new Error(d.error || "Failed to load avatar"); });
-        return res.json();
-      })
-      .then((d) => { if (!cancelled) setAvatarData(d); })
-      .catch((err) => { if (!cancelled) setError(err.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-
-    return () => { cancelled = true; };
-  }, [username]);
-
-  // Fetch 3D data for an individual item
-  const fetchItemMesh = useCallback(async (assetId, itemType) => {
-    // Check cache first
+  // Fetch raw mesh + attachment data from the unified asset-mesh endpoint
+  const fetchItemData = useCallback(async (assetId, itemType) => {
     if (meshCache.current[assetId]) {
       setEquippedItems((prev) => ({
         ...prev,
-        [assetId]: { meshData: meshCache.current[assetId], loading: false, error: null, itemType },
+        [assetId]: { data: meshCache.current[assetId], loading: false, error: null, itemType },
       }));
       return;
     }
 
     setEquippedItems((prev) => ({
       ...prev,
-      [assetId]: { meshData: null, loading: true, error: null, itemType },
+      [assetId]: { data: null, loading: true, error: null, itemType },
     }));
 
     try {
-      const res = await fetch(`/api/asset-3d?assetId=${assetId}`);
+      const res = await fetch(`/api/asset-mesh?assetId=${assetId}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || `Failed to load item 3D (${res.status})`);
+        throw new Error(d.error || `Failed to load mesh (${res.status})`);
       }
-      const meshData = await res.json();
-      meshCache.current[assetId] = meshData;
+
+      const data = await res.json();
+      meshCache.current[assetId] = data;
       setEquippedItems((prev) => ({
         ...prev,
-        [assetId]: { meshData, loading: false, error: null, itemType },
+        [assetId]: { data, loading: false, error: null, itemType },
       }));
     } catch (err) {
       setEquippedItems((prev) => ({
         ...prev,
-        [assetId]: { meshData: null, loading: false, error: err.message, itemType },
+        [assetId]: { data: null, loading: false, error: err.message, itemType },
       }));
     }
   }, []);
 
   // Sync outfit changes → equippedItems
-  useEffect(() => {
+  // Using a ref comparison to avoid re-running on every render
+  if (outfit !== prevOutfitRef.current) {
+    prevOutfitRef.current = outfit;
     const outfitIds = new Set(outfit.map((i) => i.id));
 
     // Add new items
     for (const item of outfit) {
       if (!equippedItems[item.id]) {
-        fetchItemMesh(item.id, item.type);
+        fetchItemData(item.id, item.type);
       }
     }
 
-    // Remove items no longer in outfit
-    setEquippedItems((prev) => {
-      const next = {};
-      for (const id of Object.keys(prev)) {
-        if (outfitIds.has(Number(id))) {
-          next[id] = prev[id];
-        }
-      }
-      return next;
-    });
-  }, [outfit]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Remove items no longer in outfit (done via setState to batch)
+    const toRemove = Object.keys(equippedItems).filter((id) => !outfitIds.has(Number(id)));
+    if (toRemove.length > 0) {
+      setEquippedItems((prev) => {
+        const next = { ...prev };
+        for (const id of toRemove) delete next[id];
+        return next;
+      });
+    }
+  }
 
-  // Count items currently loading
   const loadingItemCount = Object.values(equippedItems).filter((e) => e.loading).length;
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Loading overlay */}
-      {loading && (
-        <div style={{
-          position: "absolute", inset: 0, zIndex: 10,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: "rgba(250, 246, 240, 0.6)", backdropFilter: "blur(4px)",
-        }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 32, height: 32,
-              borderWidth: 2, borderStyle: "solid", borderColor: "var(--blush)",
-              borderTopColor: "transparent", borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-            }} />
-            <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>
-              Loading {username}&apos;s avatar...
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Error overlay */}
-      {error && !loading && (
-        <div style={{
-          position: "absolute", inset: 0, zIndex: 10,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: "rgba(250, 246, 240, 0.6)", backdropFilter: "blur(4px)",
-        }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center", padding: "0 32px" }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: "50%",
-              background: "rgba(196, 96, 90, 0.1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <span style={{ color: "var(--danger)", fontSize: 18 }}>{"\u2715"}</span>
-            </div>
-            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>
-              Couldn&apos;t load avatar
-            </span>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              {error}
-            </span>
-          </div>
-        </div>
-      )}
-
       <Canvas
         shadows
-        camera={{ position: [0, 1.2, 5], fov: 35 }}
+        camera={{ position: [0, 1.5, 6], fov: 35 }}
         style={{ background: "transparent" }}
       >
         {/* Lighting */}
@@ -174,33 +96,29 @@ export default function AvatarViewer({ username, outfit = [], onRemoveItem }) {
         <color attach="background" args={["#f0e8dc"]} />
 
         <ContactShadows
-          position={[0, -0.01, 0]}
+          position={[0, -2, 0]}
           opacity={0.15}
           scale={10}
           blur={2}
-          far={4}
+          far={6}
           color="#4a3728"
         />
 
-        {/* Base avatar */}
+        {/* Static mannequin — always visible */}
         <Suspense fallback={null}>
-          {avatarData && !loading && !error && <Avatar data={avatarData} />}
+          <Mannequin color="#c8b8a4" />
         </Suspense>
 
         {/* Equipped item meshes */}
-        {avatarData && Object.entries(equippedItems).map(([assetId, entry]) => (
-          entry.meshData && (
-            <Suspense key={assetId} fallback={null}>
-              <ItemMesh
-                data={entry.meshData}
-                avatarAabb={avatarData.aabb}
-                itemType={entry.itemType}
-              />
-            </Suspense>
+        {Object.entries(equippedItems).map(([assetId, entry]) => (
+          entry.data && (
+            <AccessoryMesh
+              key={assetId}
+              data={entry.data}
+              itemType={entry.itemType}
+            />
           )
         ))}
-
-        {loading && <LoadingIndicator />}
 
         <OrbitControls
           enableDamping
@@ -211,7 +129,7 @@ export default function AvatarViewer({ username, outfit = [], onRemoveItem }) {
           maxDistance={12}
           minPolarAngle={Math.PI / 6}
           maxPolarAngle={Math.PI - Math.PI / 6}
-          target={[0, 0.8, 0]}
+          target={[0, 0.5, 0]}
         />
       </Canvas>
 
@@ -353,7 +271,7 @@ export default function AvatarViewer({ username, outfit = [], onRemoveItem }) {
       </div>
 
       {/* Hint when no items equipped */}
-      {avatarData && !loading && !error && outfit.length === 0 && (
+      {outfit.length === 0 && (
         <div style={{
           position: "absolute", top: 16, left: 16, zIndex: 5,
           padding: "10px 14px",
@@ -364,7 +282,7 @@ export default function AvatarViewer({ username, outfit = [], onRemoveItem }) {
           maxWidth: 200,
         }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
-            Add items from the catalog to try them on your avatar
+            Add items from the catalog to try them on the mannequin
           </div>
         </div>
       )}

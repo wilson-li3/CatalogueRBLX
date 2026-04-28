@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  serverExternalPackages: ["rbxm-parser"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "tr.rbxcdn.com" },

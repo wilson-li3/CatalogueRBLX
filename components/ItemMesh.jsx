@@ -1,102 +1,165 @@
 "use client";
 
 import { useLoader } from "@react-three/fiber";
+import { useMemo } from "react";
+import * as THREE from "three";
 import { MTLLoader } from "@/lib/MTLLoader";
 import { OBJLoader } from "@/lib/OBJLoader";
 
-// Map item type → target Y position in world space (after avatar scale+offset)
-// Avatar renders with scale=2, position=[0,-206,-5], rotation=[0,PI,0]
-// Body part world Y values:
-//   Head top=4.4, Head=3.0, Neck=1.5, Shoulders=0, Torso=-1, Waist=-3, Feet=-6
-const TYPE_TARGET_Y = {
-  // Catalog category names (from lib/roblox.js guessType / CATEGORY_CONFIG)
-  Hat: 4.4,
-  Hair: 4.4,
-  Face: 2.8,
-  Neck: 1.5,
-  Back: 0,
-  Shirt: -1,
-  Pants: -3,
-  TShirt: -1,
-  Shoes: -6,
-  // Roblox API type strings
-  "Neck Accessories": 1.5,
-  "Shoulder Accessories": 0,
-  "Waist Accessories": -3,
-  "Front Accessories": -1,
-  // Full/alternate names
-  HairAccessory: 4.4,
-  "Hair Accessory": 4.4,
-  FaceAccessory: 2.8,
-  "Face Accessory": 2.8,
-  NeckAccessory: 1.5,
-  "Neck Accessory": 1.5,
-  ShoulderAccessory: 0,
-  "Shoulder Accessory": 0,
-  BackAccessory: 0,
-  "Back Accessory": 0,
-  FrontAccessory: -1,
-  "Front Accessory": -1,
-  WaistAccessory: -3,
-  "Waist Accessory": -3,
+// Mannequin attachment positions in GLB stud coordinates
+// Mannequin faces +Z, centered at X=0, feet at Y≈-1.97, head top at Y≈3.0
+const MANNEQUIN_ATTACHMENTS = {
+  HatAttachment:          [0, 3.15, 0],
+  HairAttachment:         [0, 3.15, 0],
+  FaceFrontAttachment:    [0, 2.415, 0.6],
+  FaceCenterAttachment:   [0, 2.415, 0],
+  NeckAttachment:         [0, 2.255, 0],
+  BodyFrontAttachment:    [0, 1.255, 0.5],
+  BodyBackAttachment:     [0, 1.255, -0.5],
+  LeftCollarAttachment:   [-0.8, 1.955, 0],
+  RightCollarAttachment:  [0.8, 1.955, 0],
+  LeftShoulderAttachment: [-1.0, 1.755, 0],
+  RightShoulderAttachment:[1.0, 1.755, 0],
+  WaistCenterAttachment:  [0, 0.460, 0],
+  WaistFrontAttachment:   [0, 0.460, 0.5],
+  WaistBackAttachment:    [0, 0.460, -0.5],
+  LeftGripAttachment:     [-1.5, 0.1, 0],
+  RightGripAttachment:    [1.5, 0.1, 0],
 };
 
-// Avatar camera direction (constant across all avatars)
-const AVATAR_CAM_DIR = { x: -0.40558, z: -0.819152 };
-const AVATAR_YAW = Math.atan2(AVATAR_CAM_DIR.x, AVATAR_CAM_DIR.z);
+// Fallback: map item type to a default attachment name
+const TYPE_TO_ATTACHMENT = {
+  Hat: "HatAttachment",
+  Hair: "HairAttachment",
+  Face: "FaceFrontAttachment",
+  Neck: "NeckAttachment",
+  Back: "BodyBackAttachment",
+  Shirt: "BodyFrontAttachment",
+  TShirt: "BodyFrontAttachment",
+  Pants: "WaistCenterAttachment",
+  Shoes: "WaistCenterAttachment",
+  "Neck Accessories": "NeckAttachment",
+  "Shoulder Accessories": "RightShoulderAttachment",
+  "Waist Accessories": "WaistCenterAttachment",
+  "Front Accessories": "BodyFrontAttachment",
+};
 
-export function ItemMesh({ data, avatarAabb, itemType }) {
-  const mtl = useLoader(MTLLoader, data.mtl);
+// Scale from OBJ thumbnail space to mannequin stud space
+// Mannequin is ~4.977 studs tall, avatar OBJ is ~5.506 units tall
+const OBJ_SCALE = 4.977 / 5.506;
+
+export function ItemMesh({ meshData, assetData, itemType }) {
+  const mtl = useLoader(MTLLoader, meshData.mtl);
   const obj = useLoader(
     OBJLoader,
-    data.obj,
+    meshData.obj,
     (loader) => {
       loader.setMaterials(mtl);
     },
     () => {}
   );
 
-  const scale = 2;
+  // Clone the OBJ so each item gets its own independent Three.js object
+  // (useLoader caches by URL and returns the same mutable reference)
+  const clonedObj = useMemo(() => {
+    const clone = obj.clone(true);
+    // Disable frustum culling on all meshes — the primitive may be positioned
+    // far from the camera target (AABB centering compensates) but Three.js
+    // culls based on the mesh's local bounding sphere before our offset applies
+    clone.traverse((child) => {
+      child.frustumCulled = false;
+    });
+    return clone;
+  }, [obj]);
 
-  // Compute yaw correction: align item's "front" to match the avatar's "front"
-  // Camera direction points FROM the model's front, so model front = -camDir in XZ
-  const camDir = data.camera?.direction;
-  let yawCorrection = 0;
-  if (camDir) {
-    const itemYaw = Math.atan2(camDir.x, camDir.z);
-    yawCorrection = AVATAR_YAW - itemYaw;
-  }
+  const computed = useMemo(() => {
+    // --- Attachment target position ---
+    const attName = assetData?.attachmentName || TYPE_TO_ATTACHMENT[itemType] || "HatAttachment";
+    const bodyPoint = MANNEQUIN_ATTACHMENTS[attName] || MANNEQUIN_ATTACHMENTS.HatAttachment;
+    const accOffset = assetData?.attachmentCFrame?.position || { x: 0, y: 0, z: 0 };
+    const mo = assetData?.meshOffset || { x: 0, y: 0, z: 0 };
 
-  // Item AABB center in its own coordinate space
-  const cx = (data.aabb.min.x + data.aabb.max.x) / 2;
-  const cy = (data.aabb.min.y + data.aabb.max.y) / 2;
-  const cz = (data.aabb.min.z + data.aabb.max.z) / 2;
+    // Position = bodyPoint - accOffset (Z flipped: Roblox front=-Z, mannequin front=+Z)
+    const target = [
+      bodyPoint[0] - accOffset.x + mo.x,
+      bodyPoint[1] - accOffset.y + mo.y,
+      bodyPoint[2] + accOffset.z - mo.z,
+    ];
 
-  // The total Y rotation = yawCorrection (align to avatar) + PI (face camera, same as avatar)
-  const totalYRot = yawCorrection + Math.PI;
+    // --- Determine rotation ---
+    const camDir = meshData.camera?.direction;
 
-  // Rotate AABB center by the FULL rotation (must match what Three.js applies to the mesh)
-  const cosR = Math.cos(totalYRot);
-  const sinR = Math.sin(totalYRot);
-  const rcx = cx * cosR + cz * sinR;
-  const rcz = -cx * sinR + cz * cosR;
+    let xRot = 0;
+    let yRot = 0;
 
-  const targetY = TYPE_TARGET_Y[itemType] ?? -0.5;
-  const targetX = 0;    // avatar center X
-  const targetZ = -4.6; // avatar center Z in world space
+    if (camDir) {
+      const isOverhead = Math.abs(camDir.y) > 0.7;
 
-  // Three.js: worldPos = position + R(totalYRot) * (scale * vertex)
-  // To place AABB center at target: position = target - scale * R(totalYRot) * center
-  const posX = targetX - rcx * scale;
-  const posY = targetY - cy * scale;
-  const posZ = targetZ - rcz * scale;
+      if (isOverhead) {
+        // Camera is above (or below) the item — the mesh is flat in the XZ plane.
+        // Apply X rotation to stand the mesh upright, then PI Y rotation to flip
+        // from Roblox front (-Z) to our front (+Z).
+        xRot = camDir.y > 0 ? Math.PI / 2 : -Math.PI / 2;
+        yRot = Math.PI;
+      } else {
+        // Normal camera angle — use camera direction to orient item.
+        // camera.direction points from item toward camera. The item's BACK faces
+        // the camera (Roblox renders assets showing the front, but the OBJ geometry
+        // has the item facing away from camera). Adding PI flips to face +Z.
+        yRot = -Math.atan2(camDir.x, camDir.z) + Math.PI;
+      }
+    }
+
+    // Apply CFrame rotation from RBXM attachment data (small orientation correction)
+    const cfRot = assetData?.attachmentCFrame?.rotation;
+    let cfX = 0, cfY = 0, cfZ = 0;
+    if (cfRot && cfRot.length === 9) {
+      const m = new THREE.Matrix4();
+      // Roblox CFrame rotation is row-major; Three.js Matrix4.set() is row-major too
+      m.set(
+        cfRot[0], cfRot[1], cfRot[2], 0,
+        cfRot[3], cfRot[4], cfRot[5], 0,
+        cfRot[6], cfRot[7], cfRot[8], 0,
+        0, 0, 0, 1
+      );
+      const euler = new THREE.Euler().setFromRotationMatrix(m, "YXZ");
+      cfX = euler.x;
+      cfY = euler.y;
+      cfZ = euler.z;
+    }
+
+    const totalRotX = xRot + cfX;
+    const totalRotY = yRot + cfY;
+    const totalRotZ = cfZ;
+
+    // --- Compute position by rotating AABB center ---
+    const cx = (meshData.aabb.min.x + meshData.aabb.max.x) / 2;
+    const cy = (meshData.aabb.min.y + meshData.aabb.max.y) / 2;
+    const cz = (meshData.aabb.min.z + meshData.aabb.max.z) / 2;
+
+    // Rotate the AABB center by the full rotation to find where it ends up,
+    // then offset so it lands at the attachment target
+    const center = new THREE.Vector3(cx, cy, cz);
+    const rotEuler = new THREE.Euler(totalRotX, totalRotY, totalRotZ, "XYZ");
+    center.applyEuler(rotEuler);
+
+    const posX = target[0] - center.x * OBJ_SCALE;
+    const posY = target[1] - center.y * OBJ_SCALE;
+    const posZ = target[2] - center.z * OBJ_SCALE;
+
+    return {
+      position: [posX, posY, posZ],
+      rotation: [totalRotX, totalRotY, totalRotZ],
+    };
+  }, [meshData, assetData, itemType]);
 
   return (
     <primitive
-      object={obj}
-      scale={scale}
-      position={[posX, posY, posZ]}
-      rotation={[0, totalYRot, 0]}
+      object={clonedObj}
+      scale={OBJ_SCALE}
+      position={computed.position}
+      rotation={computed.rotation}
+      frustumCulled={false}
     />
   );
 }
