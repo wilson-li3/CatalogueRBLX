@@ -41,6 +41,16 @@ const TYPE_TO_ATTACHMENT = {
   "Front Accessories": "BodyFrontAttachment",
 };
 
+// Check if a 3x3 rotation matrix (flat array of 9) is identity
+function isIdentityRotation(rot) {
+  if (!rot || rot.length !== 9) return true;
+  return (
+    Math.abs(rot[0] - 1) < 0.001 && Math.abs(rot[1]) < 0.001 && Math.abs(rot[2]) < 0.001 &&
+    Math.abs(rot[3]) < 0.001 && Math.abs(rot[4] - 1) < 0.001 && Math.abs(rot[5]) < 0.001 &&
+    Math.abs(rot[6]) < 0.001 && Math.abs(rot[7]) < 0.001 && Math.abs(rot[8] - 1) < 0.001
+  );
+}
+
 export function AccessoryMesh({ data, itemType }) {
   const { geometry, material, position } = useMemo(() => {
     // ── 1. Build BufferGeometry from parsed mesh data ──
@@ -55,7 +65,7 @@ export function AccessoryMesh({ data, itemType }) {
     geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
 
-    // ── 2. Apply SpecialMesh Scale ──
+    // ── 2. Apply mesh Scale (SpecialMesh.Scale or MeshPart Size/InitialSize) ──
     const s = data.meshScale;
     if (s.x !== 1 || s.y !== 1 || s.z !== 1) {
       geo.applyMatrix4(new THREE.Matrix4().makeScale(s.x, s.y, s.z));
@@ -67,45 +77,137 @@ export function AccessoryMesh({ data, itemType }) {
       geo.applyMatrix4(new THREE.Matrix4().makeTranslation(o.x, o.y, o.z));
     }
 
-    // ── 4. Rotate 180° around Y to convert from Roblox (-Z front) to mannequin (+Z front) ──
-    // This is a scale of (-1, 1, -1) with determinant=1, so winding is preserved.
+    // ── 4. Apply attachment CFrame rotation if non-identity ──
+    const attRot = data.attachmentRotation;
+    if (!isIdentityRotation(attRot)) {
+      const m = new THREE.Matrix4();
+      m.set(
+        attRot[0], attRot[1], attRot[2], 0,
+        attRot[3], attRot[4], attRot[5], 0,
+        attRot[6], attRot[7], attRot[8], 0,
+        0, 0, 0, 1
+      );
+      m.invert();
+      geo.applyMatrix4(m);
+    }
+
+    // ── 5. Rotate 180° around Y to convert from Roblox (-Z front) to mannequin (+Z front) ──
     geo.applyMatrix4(new THREE.Matrix4().makeScale(-1, 1, -1));
 
-    geo.computeBoundingSphere();
-
-    // ── 5. Compute world position using attachment math ──
-    // bodyAttach is in mannequin coords, accAttach is in Roblox coords.
-    // After flipping the geometry (step 4), the attachment point in mannequin coords is:
-    //   accAttach_mannequin = (-accAttach.x, accAttach.y, -accAttach.z)
-    // Handle center = bodyAttach - accAttach_mannequin
+    // ── 6. Resolve attachment name and compute position ──
     const attName = data.attachmentName || TYPE_TO_ATTACHMENT[itemType] || "HatAttachment";
     const bodyAttach = BODY_ATTACHMENTS[attName] || BODY_ATTACHMENTS.HatAttachment;
     const acc = data.attachmentPosition;
 
     const pos = [
-      bodyAttach[0] - (-acc.x),  // bodyAttach.x + accAttach.x
+      bodyAttach[0] - (-acc.x),
       bodyAttach[1] - acc.y,
-      bodyAttach[2] - (-acc.z),  // bodyAttach.z + accAttach.z
+      bodyAttach[2] - (-acc.z),
     ];
 
-    // ── 6. Create material ──
+    // ── 7. Bounding-box normalization (per-axis for hair/hat, per-dim for others) ──
+    geo.computeBoundingBox();
+    const bbox = geo.boundingBox;
+    const bboxWidth = bbox.max.x - bbox.min.x;
+    const bboxHeight = bbox.max.y - bbox.min.y;
+    const bboxDepth = bbox.max.z - bbox.min.z;
+
+    const isHairOrHat = attName === "HairAttachment" || attName === "HatAttachment";
+    const isFace = attName === "FaceFrontAttachment" || attName === "FaceCenterAttachment";
+
+    let needsNormalization = false;
+    let correction = 1;
+
+    if (isFace) {
+      const maxDim = Math.max(bboxWidth, bboxHeight, bboxDepth);
+      if (maxDim > 1.5) {
+        correction = 1.5 / maxDim;
+        needsNormalization = true;
+      }
+    } else if (isHairOrHat) {
+      const widthLimit = 2.0;
+      const heightLimit = 4.0;
+      const depthLimit = 2.0;
+      const widthRatio = bboxWidth > widthLimit ? widthLimit / bboxWidth : 1;
+      const heightRatio = bboxHeight > heightLimit ? heightLimit / bboxHeight : 1;
+      const depthRatio = bboxDepth > depthLimit ? depthLimit / bboxDepth : 1;
+      correction = Math.min(widthRatio, heightRatio, depthRatio);
+      if (correction < 1) {
+        needsNormalization = true;
+      }
+    } else {
+      const maxDim = Math.max(bboxWidth, bboxHeight, bboxDepth);
+      if (maxDim > 3.0) {
+        correction = 3.0 / maxDim;
+        needsNormalization = true;
+      }
+    }
+
+    if (needsNormalization) {
+      geo.scale(correction, correction, correction);
+      geo.computeBoundingBox();
+    }
+
+    // ── 8. Diagnostic logging ──
+    console.log(`[AccessoryMesh] assetId=${data.assetId || "unknown"}`, {
+      attachmentName: attName,
+      bbox: { w: bboxWidth.toFixed(2), h: bboxHeight.toFixed(2), d: bboxDepth.toFixed(2) },
+      correction: correction.toFixed(3),
+      normalized: needsNormalization,
+      finalPosition: pos,
+    });
+
+    geo.computeBoundingSphere();
+
+    // ── 9. Create material ──
+    const isHairType = attName === "HairAttachment"
+      || itemType === "Hair"
+      || itemType === "HairAccessories";
+
     let mat;
     if (data.texture) {
       const tex = new THREE.TextureLoader().load(data.texture);
-      tex.flipY = false; // V was already flipped in the mesh parser
+      tex.flipY = false;
       tex.colorSpace = THREE.SRGBColorSpace;
-      mat = new THREE.MeshStandardMaterial({
-        map: tex,
-        roughness: 0.6,
-        metalness: 0.05,
-        side: THREE.DoubleSide,
-      });
+
+      if (isHairType) {
+        // Alpha cutout mode — no z-fighting between hair strands
+        mat = new THREE.MeshStandardMaterial({
+          map: tex,
+          roughness: 0.6,
+          metalness: 0.05,
+          side: THREE.DoubleSide,
+          alphaTest: 0.5,
+          transparent: false,
+          depthWrite: true,
+          polygonOffset: true,
+          polygonOffsetFactor: 1,
+          polygonOffsetUnits: 1,
+        });
+      } else {
+        // Normal items — allow partial transparency
+        mat = new THREE.MeshStandardMaterial({
+          map: tex,
+          roughness: 0.6,
+          metalness: 0.05,
+          side: THREE.DoubleSide,
+          alphaTest: 0.1,
+          transparent: true,
+          depthWrite: true,
+          polygonOffset: true,
+          polygonOffsetFactor: 1,
+          polygonOffsetUnits: 1,
+        });
+      }
     } else {
       mat = new THREE.MeshStandardMaterial({
         color: 0xc8b8a4,
         roughness: 0.6,
         metalness: 0.05,
         side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
       });
     }
 
@@ -117,6 +219,7 @@ export function AccessoryMesh({ data, itemType }) {
       geometry={geometry}
       material={material}
       position={position}
+      renderOrder={1}
       castShadow
       receiveShadow
     />
