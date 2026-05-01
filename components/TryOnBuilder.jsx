@@ -1,141 +1,204 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
-import { useSearchParams } from "next/navigation";
-import { useCatalogSearch } from "@/hooks/useCatalogSearch";
-import { useOutfit } from "@/hooks/useOutfit";
-import { useToast } from "@/hooks/useToast";
+import { useState } from "react";
+import Link from "next/link";
+import { useOutfitContext } from "@/context/OutfitContext";
+import { BODY_TYPES } from "@/context/OutfitContext";
+import AvatarPreview2D from "./AvatarPreview2D";
 import Header from "./Header";
-import SearchBar from "./SearchBar";
-import CategoryTabs from "./CategoryTabs";
-import ItemCard from "./ItemCard";
+import ShareModal from "./ShareModal";
 import Toast from "./Toast";
-
-// Dynamic import — Three.js cannot SSR
-const AvatarViewer = dynamic(() => import("@/components/AvatarViewer"), {
-  ssr: false,
-  loading: () => (
-    <div style={{
-      width: "100%", height: "100%", display: "flex",
-      alignItems: "center", justifyContent: "center",
-      background: "var(--cream-dark)", color: "var(--text-muted)", fontSize: 13,
-    }}>
-      Loading 3D viewer...
-    </div>
-  ),
-});
+import { useToast } from "@/hooks/useToast";
 
 export default function TryOnBuilder() {
-  const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
+  const {
+    cart, worn, bodyType, bodyTypeIndex,
+    toggleWorn, unwear, removeFromCart, clearWorn,
+    isWorn, setBodyTypeIndex, renderAssetIds,
+    totalWornPrice, totalCartPrice,
+  } = useOutfitContext();
 
   const { toast, showToast } = useToast();
-  const { outfit, addToOutfit, removeFromOutfit, clearOutfit } = useOutfit(showToast);
-  const { items, loading } = useCatalogSearch(query, activeCategory);
+  const [showShare, setShowShare] = useState(false);
 
-  useEffect(() => {
-    const q = searchParams.get("q");
-    const cat = searchParams.get("category");
-    if (q) setQuery(q);
-    if (cat) setActiveCategory(cat);
-  }, [searchParams]);
+  const unwornCart = cart.filter((item) => !isWorn(item.id));
 
-  const totalPrice = outfit.reduce((sum, i) => sum + i.price, 0);
+  const handleWear = (item) => {
+    toggleWorn(item);
+    showToast(isWorn(item.id) ? `Removed ${item.name}` : `Wearing ${item.name}`);
+  };
+
+  const handleUnwear = (item) => {
+    unwear(item.id);
+    showToast(`Removed ${item.name}`);
+  };
+
+  const handleRemove = (item) => {
+    removeFromCart(item.id);
+    showToast(`Removed ${item.name} from cart`);
+  };
 
   return (
     <div style={{ fontFamily: "'Libre Franklin', sans-serif", color: "var(--text)", background: "var(--bg)", minHeight: "100vh" }}>
       <Header />
 
       <div style={s.splitLayout}>
-        {/* ===== Left: 3D Viewport ===== */}
+        {/* ===== Left: Avatar Preview ===== */}
         <div style={s.viewportPanel}>
-          <AvatarViewer outfit={outfit} onRemoveItem={removeFromOutfit} />
+          <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+            <AvatarPreview2D
+              equippedAssetIds={worn.map((i) => i.id)}
+              bodyAssetIds={bodyType.assetIds}
+              scales={bodyType.scales}
+            />
+          </div>
+
+          {/* Body Type Selector */}
+          <div style={s.bodyTypeBar}>
+            <span style={s.bodyTypeLabel}>Body</span>
+            <div style={s.bodyTypePills}>
+              {BODY_TYPES.map((body, idx) => (
+                <button
+                  key={body.name}
+                  onClick={() => setBodyTypeIndex(idx)}
+                  title={body.description}
+                  style={{
+                    ...s.bodyTypePill,
+                    ...(bodyTypeIndex === idx ? s.bodyTypePillActive : {}),
+                  }}
+                >
+                  {body.name}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* ===== Right: Sidebar ===== */}
+        {/* ===== Right: Outfit Manager ===== */}
         <div style={s.sidebar}>
-          {/* Search + Categories */}
-          <div style={s.sidebarSection}>
-            <SearchBar query={query} setQuery={setQuery} />
-            <div style={{ marginTop: 12 }}>
-              <CategoryTabs active={activeCategory} setActive={setActiveCategory} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
-              <span>{loading ? "Searching..." : `${items.length} items`}</span>
-              {query && (
-                <span style={{ cursor: "pointer", color: "var(--accent-warm)", fontWeight: 600 }} onClick={() => setQuery("")}>
+          {/* Wearing Section */}
+          <div style={s.section}>
+            <div style={s.sectionHeader}>
+              <span style={s.sectionTitle}>Wearing</span>
+              <span style={s.sectionCount}>{worn.length}</span>
+              {worn.length > 0 && (
+                <button onClick={() => { clearWorn(); showToast("Cleared all worn items"); }} style={s.clearBtn}>
                   Clear
-                </span>
+                </button>
               )}
             </div>
-          </div>
 
-          {/* Item Grid */}
-          <div style={s.itemGrid}>
-            {items.map((item, idx) => (
-              <div key={item.id} style={{ animation: `softReveal 0.5s cubic-bezier(0.23, 1, 0.32, 1) ${idx * 0.03}s both` }}>
-                <ItemCard
-                  item={item}
-                  onAdd={addToOutfit}
-                  inOutfit={outfit.some((i) => i.id === item.id)}
-                />
+            {worn.length === 0 ? (
+              <div style={s.emptyHint}>
+                <p>Select items from your cart below to try them on</p>
               </div>
-            ))}
-            {items.length === 0 && !loading && (
-              <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px 0" }}>
-                <p style={{ color: "var(--text-muted)", fontSize: 13 }}>No items found</p>
-              </div>
-            )}
-          </div>
-
-          {/* Outfit Summary */}
-          {outfit.length > 0 && (
-            <div style={s.outfitSummary}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--text-light)" }}>
-                  Your Outfit ({outfit.length})
-                </span>
-                <button onClick={clearOutfit} style={s.clearBtn}>Clear</button>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-                {outfit.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => removeFromOutfit(item.id)}
-                    style={s.outfitChip}
-                    title={`Remove ${item.name}`}
-                  >
-                    {item.thumbnail ? (
-                      <img src={item.thumbnail} alt="" style={{ width: 24, height: 24, borderRadius: 6, objectFit: "cover" }} />
-                    ) : (
-                      <div style={{ width: 24, height: 24, borderRadius: 6, background: "var(--blush)", opacity: 0.3 }} />
-                    )}
-                    <span style={{ fontSize: 11, color: "var(--text)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>
-                      {item.name}
-                    </span>
-                    <span style={{ fontSize: 10, color: "var(--text-caption)", marginLeft: "auto" }}>{"\u2715"}</span>
+            ) : (
+              <div style={s.itemList}>
+                {worn.map((item) => (
+                  <div key={item.id} style={s.wornItem}>
+                    <div style={s.itemThumb}>
+                      {item.thumbnail ? (
+                        <img src={item.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", background: "var(--cream-dark)" }} />
+                      )}
+                      <div style={s.wornBadge}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f5efe7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={s.itemName}>{item.name}</div>
+                      <div style={s.itemType}>{item.type}</div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={s.itemPrice}>R$ {item.price.toLocaleString()}</div>
+                      <button onClick={() => handleUnwear(item)} style={s.removeBtn}>Unwear</button>
+                    </div>
                   </div>
                 ))}
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-                <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 500 }}>Total</span>
+            )}
+
+            {worn.length > 0 && (
+              <div style={s.totalRow}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>Outfit Total</span>
                 <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700, color: "var(--robux)" }}>
-                  R$ {totalPrice.toLocaleString()}
+                  R$ {totalWornPrice.toLocaleString()}
                 </span>
               </div>
+            )}
+
+            {worn.length > 0 && (
+              <button onClick={() => setShowShare(true)} style={s.shareBtn}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ marginRight: 6 }}>
+                  <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </svg>
+                Share Outfit
+              </button>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div style={s.divider} />
+
+          {/* Cart Section */}
+          <div style={s.section}>
+            <div style={s.sectionHeader}>
+              <span style={s.sectionTitle}>In Cart</span>
+              <span style={s.sectionCount}>{unwornCart.length}</span>
             </div>
-          )}
+
+            {cart.length === 0 ? (
+              <div style={s.emptyHint}>
+                <p>No items in cart yet</p>
+                <Link href="/builder" style={s.browseLink}>Browse Catalog</Link>
+              </div>
+            ) : unwornCart.length === 0 ? (
+              <div style={s.emptyHint}>
+                <p>All cart items are being worn</p>
+                <Link href="/builder" style={s.browseLink}>Add More Items</Link>
+              </div>
+            ) : (
+              <div style={s.itemList}>
+                {unwornCart.map((item) => (
+                  <div
+                    key={item.id}
+                    style={s.cartItem}
+                    onClick={() => handleWear(item)}
+                  >
+                    <div style={s.itemThumb}>
+                      {item.thumbnail ? (
+                        <img src={item.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", background: "var(--cream-dark)" }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={s.itemName}>{item.name}</div>
+                      <div style={s.itemType}>{item.type}</div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={s.itemPrice}>R$ {item.price.toLocaleString()}</div>
+                      <div style={s.wearHint}>Tap to wear</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      {showShare && <ShareModal outfit={worn} onClose={() => setShowShare(false)} />}
       <Toast message={toast} />
     </div>
   );
 }
 
-// ---- Inline styles ----
 const s = {
   splitLayout: {
     display: "flex",
@@ -146,62 +209,229 @@ const s = {
     position: "relative",
     background: "var(--cream-dark)",
     minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
   },
   sidebar: {
-    width: 420,
+    width: 380,
     display: "flex",
     flexDirection: "column",
     borderLeft: "1px solid var(--border)",
     background: "var(--surface)",
     overflowY: "auto",
+    overflowX: "hidden",
     flexShrink: 0,
   },
-  sidebarSection: {
-    padding: "20px 20px 0",
+  section: {
+    padding: "16px 18px",
+    display: "flex",
+    flexDirection: "column",
   },
-  sectionLabel: {
-    display: "block",
+  sectionHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  sectionTitle: {
     fontSize: 10,
     fontWeight: 700,
-    letterSpacing: "0.2em",
+    letterSpacing: "0.15em",
     textTransform: "uppercase",
     color: "var(--text-caption)",
-    marginBottom: 10,
   },
-  itemGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: 10,
-    padding: "16px 20px",
-    flex: 1,
-    alignContent: "start",
-  },
-  outfitSummary: {
-    padding: "16px 20px",
-    borderTop: "1px solid var(--border)",
-    background: "var(--surface-2)",
-    flexShrink: 0,
+  sectionCount: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "var(--accent-warm)",
+    background: "rgba(160, 103, 75, 0.08)",
+    padding: "2px 8px",
+    borderRadius: 10,
   },
   clearBtn: {
+    marginLeft: "auto",
     fontSize: 11,
     color: "var(--danger)",
     fontWeight: 600,
     cursor: "pointer",
-    border: "none",
-    background: "none",
     fontFamily: "'Libre Franklin', sans-serif",
   },
-  outfitChip: {
+  emptyHint: {
+    padding: "20px 0",
+    textAlign: "center",
+    fontSize: 12,
+    color: "var(--text-caption)",
+    lineHeight: 1.5,
+  },
+  browseLink: {
+    display: "inline-block",
+    marginTop: 10,
+    padding: "7px 18px",
+    borderRadius: 20,
+    background: "#4a3728",
+    color: "#f5efe7",
+    fontSize: 12,
+    fontWeight: 600,
+    textDecoration: "none",
+    fontFamily: "'Libre Franklin', sans-serif",
+  },
+  itemList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  wornItem: {
     display: "flex",
     alignItems: "center",
-    gap: 6,
-    padding: "4px 8px",
-    borderRadius: 10,
-    background: "var(--surface)",
+    gap: 10,
+    padding: "8px 10px",
+    borderRadius: 12,
+    background: "rgba(160, 103, 75, 0.04)",
     borderWidth: 1,
     borderStyle: "solid",
-    borderColor: "var(--border)",
+    borderColor: "rgba(160, 103, 75, 0.15)",
+    transition: "all 0.2s ease",
+  },
+  cartItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "8px 10px",
+    borderRadius: 12,
+    background: "var(--surface-2)",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "rgba(180, 160, 140, 0.1)",
     cursor: "pointer",
     transition: "all 0.2s ease",
+  },
+  itemThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    overflow: "hidden",
+    flexShrink: 0,
+    background: "var(--surface-3)",
+    position: "relative",
+  },
+  wornBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: "50%",
+    background: "var(--accent-warm)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  itemName: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--text)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  itemType: {
+    fontSize: 10,
+    color: "var(--text-caption)",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+    fontWeight: 500,
+    marginTop: 1,
+  },
+  itemPrice: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "var(--robux)",
+    fontFamily: "'Playfair Display', serif",
+  },
+  removeBtn: {
+    fontSize: 10,
+    color: "var(--text-caption)",
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Libre Franklin', sans-serif",
+    marginTop: 2,
+  },
+  wearHint: {
+    fontSize: 10,
+    color: "var(--accent-warm)",
+    fontWeight: 500,
+    marginTop: 2,
+  },
+  totalRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTop: "1px solid var(--border)",
+  },
+  shareBtn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 12,
+    padding: "10px 18px",
+    background: "#4a3728",
+    color: "#f5efe7",
+    borderRadius: 20,
+    fontWeight: 700,
+    fontSize: 12,
+    fontFamily: "'Libre Franklin', sans-serif",
+    letterSpacing: "0.03em",
+    transition: "all 0.3s ease",
+  },
+  divider: {
+    height: 1,
+    background: "var(--border)",
+    margin: "0 18px",
+  },
+  bodyTypeBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "10px 20px",
+    borderTop: "1px solid rgba(180, 160, 140, 0.15)",
+    background: "rgba(255, 255, 255, 0.5)",
+    backdropFilter: "blur(8px)",
+    flexShrink: 0,
+  },
+  bodyTypeLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.15em",
+    textTransform: "uppercase",
+    color: "#8b7a68",
+    fontFamily: "'Libre Franklin', sans-serif",
+    flexShrink: 0,
+  },
+  bodyTypePills: {
+    display: "flex",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  bodyTypePill: {
+    padding: "5px 14px",
+    borderRadius: 9999,
+    fontSize: 12,
+    fontWeight: 500,
+    fontFamily: "'Libre Franklin', sans-serif",
+    cursor: "pointer",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "rgba(180, 160, 140, 0.3)",
+    background: "#f5efe7",
+    color: "#6b5e50",
+    transition: "all 0.2s ease",
+  },
+  bodyTypePillActive: {
+    background: "rgba(196, 136, 100, 0.12)",
+    borderColor: "#c48864",
+    color: "#9c5e3a",
+    fontWeight: 600,
   },
 };
